@@ -1,30 +1,24 @@
 export const metadata = {
-  title: 'AI编程学习 - 0基础入门',
-  description: '小白0基础入门AI编程，借助AI编程工具快速开发出你的第一个AI应用和网站',
+  title: '简单付费测试',
+  description: '测试Z-Pay支付功能',
 }
 
-import Hero from '@/components/hero'
-import Inspiration from '@/components/inspiration'
-import Carousel from '@/components/carousel'
-import Creatives from '@/components/creatives'
-import Pricing from '@/components/pricing'
-import Testimonials from '@/components/testimonials'
-import Faqs from '@/components/faqs'
-import Blog from '@/components/blog'
-import Cta from '@/components/cta'
+import SimplePay from '@/components/simple-pay'
+import ZPayTest from '@/components/zpay-test'
 
 export default function Home() {
   return (
-    <>
-      <Hero />
-      <Inspiration />
-      <Carousel />
-      <Creatives />
-      <Pricing />
-      <Testimonials />
-      <Faqs />
-      <Blog />
-      <Cta />
-    </>
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Z-Pay配置测试 */}
+        <ZPayTest />
+
+        {/* 分隔线 */}
+        <div className="border-t border-gray-300 my-8"></div>
+
+        {/* 简单支付界面 */}
+        <SimplePay />
+      </div>
+    </div>
   )
 }

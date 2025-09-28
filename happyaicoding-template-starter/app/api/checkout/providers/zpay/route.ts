@@ -5,15 +5,22 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 
-// 签名生成函数保持不变
+// Z-Pay签名生成函数 - 根据官方文档修正
 const generateSign = (params: Record<string, any>, key: string): string => {
     const sortedKeys = Object.keys(params).sort();
     // 过滤掉 sign 和 sign_type，以及空值参数
-    const strToSign = sortedKeys
-        .filter(k => k !== 'sign' && k !== 'sign_type' && params[k] !== '' && params[k] !== null && params[k] !== undefined)
+    const filteredParams = sortedKeys
+        .filter(k => k !== 'sign' && k !== 'sign_type' && params[k] !== '' && params[k] !== null && params[k] !== undefined);
+
+    const strToSign = filteredParams
         .map(k => `${k}=${params[k]}`)
         .join('&');
-    return crypto.createHash('md5').update(strToSign + key).digest('hex');
+
+    const finalStr = strToSign + key;
+    console.log('签名字符串:', strToSign);
+    console.log('加密前字符串:', finalStr);
+
+    return crypto.createHash('md5').update(finalStr).digest('hex');
 };
 
 // 在 App Router 中，我们导出一个名为 POST 的函数来处理 POST 请求
@@ -74,23 +81,35 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Failed to create order.' }, { status: 500 });
         }
 
+        // 确保金额格式正确 - Z-Pay要求数字格式
+        const formattedMoney = parseFloat(money).toFixed(2);
+
         const params = {
             pid: zpayPid,
             out_trade_no: outTradeNo,
             name: name,
-            money: money.toString(),
+            money: formattedMoney,
             type: type,
             notify_url: `${appUrl}/api/checkout/providers/zpay/webhook`,
-            return_url: `${appUrl}/dashboard`, // 支付成功后跳转的页面
+            return_url: `${appUrl}/dashboard`,
             sign_type: 'MD5',
         };
 
+        console.log('Z-Pay配置信息:');
+        console.log('- PID:', zpayPid);
+        console.log('- KEY:', zpayKey ? `${zpayKey.substring(0, 8)}...` : 'undefined');
+        console.log('- APP_URL:', appUrl);
+        console.log('支付参数:', params);
+
         const sign = generateSign(params, zpayKey);
+        console.log('生成的签名:', sign);
 
         const zpayGateway = 'https://zpayz.cn/submit.php';
         // URLSearchParams 会自动处理 URL 编码
         const finalParams = new URLSearchParams({ ...params, sign });
         const paymentUrl = `${zpayGateway}?${finalParams.toString()}`;
+
+        console.log('最终支付URL:', paymentUrl);
 
         return NextResponse.json({ paymentUrl });
 
