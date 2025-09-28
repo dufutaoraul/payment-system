@@ -1,11 +1,9 @@
 'use client';
 
 import { createClient } from 'utils/supabase/client';
-import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 export default function SimplePay() {
-    const router = useRouter();
     const supabase = createClient();
     const [user, setUser] = useState<any>(null);
     const [loading, setLoading] = useState(false);
@@ -58,6 +56,22 @@ export default function SimplePay() {
         }
     };
 
+    // 处理找回密码
+    const handleResetPassword = async (email: string) => {
+        setLoading(true);
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${window.location.origin}/auth/reset-password`,
+            });
+            if (error) throw error;
+            alert('密码重置邮件已发送，请检查邮箱！');
+        } catch (error: any) {
+            alert('发送失败: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // 处理支付
     const handlePay = async (amount: number, name: string) => {
         if (!user) {
@@ -65,8 +79,7 @@ export default function SimplePay() {
             return;
         }
 
-        console.log(`开始处理支付: ${name}, 金额: ¥${amount}`);
-
+        setLoading(true);
         try {
             const response = await fetch('/api/checkout/providers/zpay', {
                 method: 'POST',
@@ -77,34 +90,23 @@ export default function SimplePay() {
                     name: name,
                     money: amount,
                     type: 'alipay',
-                    param: { productId: 'test-product' },
+                    param: { productId: 'payment-system' },
                 }),
             });
 
             const data = await response.json();
-            console.log('支付API响应状态:', response.status);
-            console.log('支付API响应数据:', data);
 
             if (response.ok && data.paymentUrl) {
-                console.log('准备跳转到支付页面:', data.paymentUrl);
-
-                // 显示确认对话框，让用户有时间查看日志
-                const shouldProceed = confirm(`支付URL已生成！\n\n点击"确定"跳转到支付页面\n点击"取消"查看详细日志\n\n支付URL: ${data.paymentUrl}`);
-
-                if (shouldProceed) {
-                    // 跳转到支付页面
-                    window.location.href = data.paymentUrl;
-                } else {
-                    console.log('用户选择查看日志，不跳转');
-                }
+                // 跳转到支付页面
+                window.location.href = data.paymentUrl;
             } else {
-                console.error('支付失败 - 响应状态:', response.status);
-                console.error('支付失败 - 响应数据:', data);
                 alert(`创建订单失败: ${data.error || data.msg || '未知错误'}`);
             }
         } catch (error) {
             console.error('支付错误:', error);
             alert('网络错误，请稍后再试。');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -116,46 +118,59 @@ export default function SimplePay() {
 
     if (authLoading) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="text-lg">加载中...</div>
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-lg text-gray-600">加载中...</div>
             </div>
         );
     }
 
     return (
-        <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-lg shadow-lg">
-            <h1 className="text-2xl font-bold text-center mb-6">简单付费测试</h1>
-            
+        <div className="w-full max-w-md mx-auto bg-white rounded-lg shadow-lg p-6">
+            <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">支付系统</h1>
+
             {!user ? (
-                <LoginForm 
-                    onLogin={handleLogin} 
-                    onSignUp={handleSignUp} 
-                    loading={loading} 
+                <AuthSection
+                    onLogin={handleLogin}
+                    onSignUp={handleSignUp}
+                    onResetPassword={handleResetPassword}
+                    loading={loading}
                 />
             ) : (
                 <PaymentSection
                     user={user}
                     onPay={handlePay}
                     onLogout={handleLogout}
+                    loading={loading}
                 />
             )}
         </div>
     );
 }
 
-// 登录表单组件
-function LoginForm({ onLogin, onSignUp, loading }: any) {
+// 认证区域组件（包含登录、注册、找回密码）
+function AuthSection({ onLogin, onSignUp, onResetPassword, loading }: any) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isSignUp, setIsSignUp] = useState(false);
+    const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!email || !password) {
-            alert('请填写邮箱和密码');
+        if (!email) {
+            alert('请填写邮箱');
             return;
         }
-        if (isSignUp) {
+
+        if (mode === 'reset') {
+            onResetPassword(email);
+            return;
+        }
+
+        if (!password) {
+            alert('请填写密码');
+            return;
+        }
+
+        if (mode === 'signup') {
             onSignUp(email, password);
         } else {
             onLogin(email, password);
@@ -163,118 +178,162 @@ function LoginForm({ onLogin, onSignUp, loading }: any) {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-                <label className="block text-sm font-medium text-gray-700">邮箱</label>
-                <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="输入邮箱"
-                />
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-gray-700">密码</label>
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="输入密码"
-                />
-            </div>
-            <button
-                type="submit"
-                disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400"
-            >
-                {loading ? '处理中...' : (isSignUp ? '注册' : '登录')}
-            </button>
-            <div className="text-center">
+        <div className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="输入邮箱地址"
+                    />
+                </div>
+
+                {mode !== 'reset' && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="输入密码"
+                        />
+                    </div>
+                )}
+
                 <button
-                    type="button"
-                    onClick={() => setIsSignUp(!isSignUp)}
-                    className="text-sm text-blue-600 hover:text-blue-500"
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
-                    {isSignUp ? '已有账户？点击登录' : '没有账户？点击注册'}
+                    {loading ? '处理中...' :
+                        mode === 'login' ? '登录' :
+                        mode === 'signup' ? '注册' : '发送重置邮件'}
                 </button>
+            </form>
+
+            <div className="text-center space-y-2">
+                {mode === 'login' && (
+                    <>
+                        <button
+                            onClick={() => setMode('signup')}
+                            className="text-sm text-blue-600 hover:text-blue-500"
+                        >
+                            没有账户？点击注册
+                        </button>
+                        <div>
+                            <button
+                                onClick={() => setMode('reset')}
+                                className="text-sm text-gray-600 hover:text-gray-500"
+                            >
+                                忘记密码？
+                            </button>
+                        </div>
+                    </>
+                )}
+
+                {mode === 'signup' && (
+                    <button
+                        onClick={() => setMode('login')}
+                        className="text-sm text-blue-600 hover:text-blue-500"
+                    >
+                        已有账户？点击登录
+                    </button>
+                )}
+
+                {mode === 'reset' && (
+                    <button
+                        onClick={() => setMode('login')}
+                        className="text-sm text-blue-600 hover:text-blue-500"
+                    >
+                        返回登录
+                    </button>
+                )}
             </div>
-        </form>
+        </div>
     );
 }
 
-// 支付区域组件
-function PaymentSection({ user, onPay, onLogout }: any) {
+// 支付区域组件（简化版）
+function PaymentSection({ user, onPay, onLogout, loading }: any) {
     return (
         <div className="space-y-6">
-            <div className="text-center">
-                <p className="text-sm text-gray-600">已登录: {user.email}</p>
+            <div className="text-center pb-4 border-b border-gray-200">
+                <p className="text-sm text-gray-600">
+                    欢迎，{user.email}
+                </p>
                 <button
                     onClick={onLogout}
-                    className="text-sm text-red-600 hover:text-red-500"
+                    className="text-sm text-red-600 hover:text-red-500 mt-1"
                 >
                     退出登录
                 </button>
             </div>
 
-            <div className="border-t pt-6">
-                <h2 className="text-lg font-semibold mb-4">选择支付金额</h2>
-                <div className="space-y-3">
-                    <PaymentButton
-                        amount={0.01}
-                        name="测试支付 - 1分钱"
-                        onPay={onPay}
-                        description="最小金额测试"
-                    />
-                    <PaymentButton
-                        amount={1}
-                        name="测试支付 - 1元"
-                        onPay={onPay}
-                        description="小额测试"
-                    />
-                    <PaymentButton
-                        amount={5}
-                        name="测试支付 - 5元"
-                        onPay={onPay}
-                        description="中等金额测试"
-                    />
-                </div>
+            <div className="space-y-3">
+                <h2 className="text-lg font-semibold text-gray-800">选择支付金额</h2>
+
+                <PaymentButton
+                    amount={0.01}
+                    name="测试支付"
+                    onPay={onPay}
+                    description="最小金额测试（1分钱）"
+                    loading={loading}
+                />
+
+                <PaymentButton
+                    amount={1}
+                    name="小额支付"
+                    onPay={onPay}
+                    description="1元支付测试"
+                    loading={loading}
+                />
+
+                <PaymentButton
+                    amount={5}
+                    name="标准支付"
+                    onPay={onPay}
+                    description="5元支付测试"
+                    loading={loading}
+                />
             </div>
         </div>
     );
 }
 
 // 支付按钮组件
-function PaymentButton({ amount, name, onPay, description }: any) {
-    const [isProcessing, setIsProcessing] = useState(false);
+function PaymentButton({ amount, name, onPay, description, loading }: any) {
+    const [processing, setProcessing] = useState(false);
 
     const handleClick = async () => {
-        if (isProcessing) return;
+        if (processing || loading) return;
 
-        setIsProcessing(true);
+        setProcessing(true);
         try {
             await onPay(amount, name);
         } finally {
-            setIsProcessing(false);
+            setProcessing(false);
         }
     };
 
-    const isDisabled = isProcessing;
+    const isDisabled = processing || loading;
 
     return (
-        <div className="border rounded-lg p-4">
+        <div className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
             <div className="flex justify-between items-center">
                 <div>
-                    <h3 className="font-medium">¥{amount}</h3>
+                    <h3 className="font-medium text-gray-800">¥{amount}</h3>
                     <p className="text-sm text-gray-500">{description}</p>
                 </div>
                 <button
                     onClick={handleClick}
                     disabled={isDisabled}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
-                    {isProcessing ? '处理中...' : '立即支付'}
+                    {processing ? '处理中...' : '立即支付'}
                 </button>
             </div>
         </div>
